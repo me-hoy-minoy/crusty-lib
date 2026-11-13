@@ -57,6 +57,7 @@ BxlXqPnQ4mG66oqSFQgDEmFdMhRb2of6xL1gYYL62C80G2T7QtmPfSab
 -----END RSA PRIVATE KEY-----
 ";
 
+	private readonly Dictionary<string, string?> _savedEnvironment = new();
 	private string? _tempDir;
 	private string? _accountsFile;
 
@@ -90,6 +91,11 @@ BxlXqPnQ4mG66oqSFQgDEmFdMhRb2of6xL1gYYL62C80G2T7QtmPfSab
 	[TestInitialize]
 	public void Init()
 	{
+		foreach (var name in new[] { IdentityTokenStorageWiring.MasterKeyFileEnvVar, IdentityTokenStorageWiring.MasterKeyEnvVar, LibationFiles.LIBATION_FILES_DIR })
+		{
+			_savedEnvironment[name] = Environment.GetEnvironmentVariable(name);
+			Environment.SetEnvironmentVariable(name, null);
+		}
 		IdentityTokenStorage.Reset();
 		_tempDir = Path.Combine(Path.GetTempPath(), "LibationTokenStorageTests-" + Guid.NewGuid().ToString("N"));
 		Directory.CreateDirectory(_tempDir);
@@ -101,9 +107,9 @@ BxlXqPnQ4mG66oqSFQgDEmFdMhRb2of6xL1gYYL62C80G2T7QtmPfSab
 	{
 		IdentityTokenStorage.Reset();
 		Configuration.RestoreSingletonInstance();
-		Environment.SetEnvironmentVariable(IdentityTokenStorageWiring.MasterKeyFileEnvVar, null);
-		Environment.SetEnvironmentVariable(IdentityTokenStorageWiring.MasterKeyEnvVar, null);
-		Environment.SetEnvironmentVariable(LibationFiles.LIBATION_FILES_DIR, null);
+		foreach (var entry in _savedEnvironment)
+			Environment.SetEnvironmentVariable(entry.Key, entry.Value);
+		_savedEnvironment.Clear();
 
 		if (_tempDir is not null && Directory.Exists(_tempDir))
 		{
@@ -146,16 +152,24 @@ BxlXqPnQ4mG66oqSFQgDEmFdMhRb2of6xL1gYYL62C80G2T7QtmPfSab
 	}
 
 	[TestMethod]
-	public void ResolveSecretStore_uses_default_libation_master_key_file()
+	public void Adjacent_master_key_requires_explicit_selection_and_is_not_changed()
 	{
 		Environment.SetEnvironmentVariable(LibationFiles.LIBATION_FILES_DIR, _tempDir);
 		var config = Configuration.CreateMockInstance();
 		var defaultPath = Path.Combine(config.LibationFiles.Location, IdentityTokenStorageWiring.DefaultMasterKeyFileName);
 		WriteMasterKeyFile(defaultPath);
+		var before = File.ReadAllBytes(defaultPath);
 
-		var store = IdentityTokenStorageWiring.ResolveSecretStore(config);
-		store.Name.Should().Be("Memory");
-		store.TryGet(AesGcmSecretProtector.DefaultMasterKeyName, out _).Should().BeTrue();
+		var store = IdentityTokenStorageWiring.ResolveSecretStore(config, () => throw new AssertFailedException("Must not create an unrelated OS key."));
+		Assert.IsFalse(store.IsAvailable);
+		StringAssert.Contains(store.UnavailableReason!, IdentityTokenStorageWiring.MasterKeyFileEnvVar);
+		CollectionAssert.AreEqual(before, File.ReadAllBytes(defaultPath));
+
+		Environment.SetEnvironmentVariable(IdentityTokenStorageWiring.MasterKeyFileEnvVar, defaultPath);
+		var selected = IdentityTokenStorageWiring.ResolveSecretStore(config);
+		Assert.IsTrue(selected.IsAvailable);
+		Assert.IsTrue(selected.TryGet(AesGcmSecretProtector.DefaultMasterKeyName, out var key));
+		CollectionAssert.AreEqual(before, key);
 	}
 
 	[TestMethod]
@@ -275,6 +289,36 @@ BxlXqPnQ4mG66oqSFQgDEmFdMhRb2of6xL1gYYL62C80G2T7QtmPfSab
 		after.SelectTokens("$..IsEncrypted").Should().HaveCount(6);
 	}
 
+	[TestMethod]
+	public void Encrypted_conversion_without_a_protector_fails_without_changing_account_file()
+	{
+		WriteLegacyAccountsFile(_accountsFile!);
+		var before = File.ReadAllBytes(_accountsFile!);
+		IdentityTokenStorage.Configure(TokenStorageMethod.Encrypted, protector: null);
+
+		var result = AccountTokenStorage.ConvertAllAccounts(TokenStorageMethod.Encrypted, _accountsFile);
+
+		Assert.IsFalse(result.Succeeded);
+		CollectionAssert.AreEqual(before, File.ReadAllBytes(_accountsFile!));
+	}
+
+	[TestMethod]
+	public void New_identity_cannot_serialize_as_encrypted_without_a_protector()
+	{
+		IdentityTokenStorage.Configure(TokenStorageMethod.Encrypted, protector: null);
+		var identity = CreateRegisteredIdentity();
+		Exception? failure = null;
+		try
+		{
+			_ = JsonConvert.SerializeObject(identity, Identity.GetJsonSerializerSettings());
+		}
+		catch (Exception ex)
+		{
+			failure = ex;
+		}
+		Assert.IsNotNull(failure, "Encrypted credentials must not serialize without a protector.");
+	}
+
 	private static void WriteLegacyAccountsFile(string path)
 	{
 		var identity = CreateRegisteredIdentity();
@@ -334,54 +378,40 @@ BxlXqPnQ4mG66oqSFQgDEmFdMhRb2of6xL1gYYL62C80G2T7QtmPfSab
 	}
 
 	[TestMethod]
-	public void TryCreateLastResortPortableMasterKeyStore_mints_default_key_file_and_loads_protector()
+	public void Unavailable_os_store_does_not_create_portable_key_or_notice()
 	{
 		Environment.SetEnvironmentVariable(LibationFiles.LIBATION_FILES_DIR, _tempDir);
 		var config = Configuration.CreateMockInstance();
-		var defaultPath = Path.Combine(config.LibationFiles.Location, IdentityTokenStorageWiring.DefaultMasterKeyFileName);
-		File.Exists(defaultPath).Should().BeFalse();
+		var unavailable = new UnavailableTestStore();
+		var before = Directory.GetFiles(config.LibationFiles.Location);
 
-		var store = IdentityTokenStorageWiring.TryCreateLastResortPortableMasterKeyStore(config);
+		var store = IdentityTokenStorageWiring.ResolveSecretStore(config, () => unavailable);
 
-		store.IsAvailable.Should().BeTrue();
-		store.Name.Should().Be("Memory");
-		File.Exists(defaultPath).Should().BeTrue();
-		File.ReadAllBytes(defaultPath).Length.Should().Be(AesGcmSecretProtector.KeySizeBytes);
-		var noticePath = Path.Combine(config.LibationFiles.Location, IdentityTokenStorageWiring.LastResortMasterKeyNoticeFileName);
-		File.Exists(noticePath).Should().BeTrue();
-		var notice = File.ReadAllText(noticePath);
-		StringAssert.Contains(notice, "LAST-RESORT");
-		StringAssert.Contains(notice, "Plaintext");
-		StringAssert.Contains(notice, IdentityTokenStorageWiring.MasterKeyFileEnvVar);
-		store.TryGet(AesGcmSecretProtector.DefaultMasterKeyName, out var key).Should().BeTrue();
-		key.Length.Should().Be(AesGcmSecretProtector.KeySizeBytes);
-
-		// Second call must reuse the file, not mint a different key.
-		var store2 = IdentityTokenStorageWiring.TryCreateLastResortPortableMasterKeyStore(config);
-		store2.TryGet(AesGcmSecretProtector.DefaultMasterKeyName, out var key2).Should().BeTrue();
-		CollectionAssert.AreEqual(key, key2);
-
-		config.TokenStorageMethod = TokenStorageMethod.Encrypted;
-		IdentityTokenStorageWiring.ConfigureFrom(config);
-		Assert.IsNotNull(IdentityTokenStorage.Protector);
-		var payload = IdentityTokenStorage.Protector!.Protect("last-resort-secret", "aad");
-		IdentityTokenStorage.Protector.Unprotect(payload, "aad").Should().Be("last-resort-secret");
+		Assert.AreSame(unavailable, store);
+		Assert.IsFalse(store.IsAvailable);
+		CollectionAssert.AreEquivalent(before, Directory.GetFiles(config.LibationFiles.Location));
+		Assert.IsFalse(File.Exists(Path.Combine(config.LibationFiles.Location, IdentityTokenStorageWiring.DefaultMasterKeyFileName)));
 	}
 
 	[TestMethod]
-	public void AnnounceLastResortPortableMasterKey_writes_notice_beside_key()
+	public void Available_os_store_is_used_without_writing_adjacent_key()
 	{
-		var keyPath = Path.Combine(_tempDir!, IdentityTokenStorageWiring.DefaultMasterKeyFileName);
-		File.WriteAllBytes(keyPath, new byte[AesGcmSecretProtector.KeySizeBytes]);
+		Environment.SetEnvironmentVariable(LibationFiles.LIBATION_FILES_DIR, _tempDir);
+		var config = Configuration.CreateMockInstance();
+		var osStore = new MemoryOsSecretStore();
 
-		IdentityTokenStorageWiring.AnnounceLastResortPortableMasterKey(keyPath);
+		Assert.AreSame(osStore, IdentityTokenStorageWiring.ResolveSecretStore(config, () => osStore));
+		Assert.IsFalse(File.Exists(Path.Combine(config.LibationFiles.Location, IdentityTokenStorageWiring.DefaultMasterKeyFileName)));
+	}
 
-		var noticePath = Path.Combine(_tempDir!, IdentityTokenStorageWiring.LastResortMasterKeyNoticeFileName);
-		File.Exists(noticePath).Should().BeTrue();
-		var notice = File.ReadAllText(noticePath);
-		StringAssert.Contains(notice, "LAST-RESORT");
-		StringAssert.Contains(notice, keyPath);
-		StringAssert.Contains(notice, "compatibility fallback");
+	private sealed class UnavailableTestStore : IOsSecretStore
+	{
+		public string Name => "Unavailable test store";
+		public bool IsAvailable => false;
+		public string? UnavailableReason => "Unavailable for testing";
+		public void Set(string key, ReadOnlySpan<byte> value) => throw new InvalidOperationException();
+		public bool TryGet(string key, out byte[] value) => throw new InvalidOperationException();
+		public void Delete(string key) => throw new InvalidOperationException();
 	}
 
 	[TestMethod]

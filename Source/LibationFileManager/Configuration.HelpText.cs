@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
 namespace LibationFileManager;
@@ -94,11 +94,11 @@ public partial class Configuration
 			much larger than AC-4 files.
 			""" },
 			{nameof(UseWidevine), """
-			Some audiobooks are only delivered in the highest
-			available quality with special, third-party content
-			protection. Enabling this option will allows you to
-			request audiobooks in the xHE-AAC codec, which is
-			often higher quality than the standard AAC-LC codec.
+			Widevine requires locally supplied device data in this build.
+			Libation does not send your account authorization to a
+			third-party service to obtain it. If device data is unavailable,
+			downloads use the standard format when Audible provides it.
+			xHE-AAC quality may be unavailable.
 			""" },
 			{nameof(Request_xHE_AAC), """
 			If selected, Libation will request audiobooks in the

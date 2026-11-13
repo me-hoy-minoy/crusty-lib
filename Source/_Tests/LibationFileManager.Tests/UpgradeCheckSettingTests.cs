@@ -14,15 +14,13 @@ public class UpgradeCheckSettingTests
 		Configuration.RestoreSingletonInstance();
 	}
 
-	// The update check is opt-out, so every install that predates the setting has to keep checking
-	// without anything having written the key.
 	[TestMethod]
-	public void Default_when_missing_is_enabled()
+	public void Default_when_missing_is_disabled()
 	{
 		var config = Configuration.CreateMockInstance();
 
 		config.Exists(nameof(Configuration.CheckForUpgradesAtStartup)).Should().BeFalse();
-		Assert.IsTrue(config.CheckForUpgradesAtStartup);
+		Assert.IsFalse(config.CheckForUpgradesAtStartup);
 	}
 
 	[TestMethod]

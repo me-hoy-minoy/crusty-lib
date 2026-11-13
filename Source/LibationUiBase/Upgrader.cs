@@ -1,9 +1,8 @@
-﻿using AppScaffolding;
+using AppScaffolding;
 using Dinah.Core.Net.Http;
 using LibationFileManager;
 using System;
 using System.IO;
-using System.Net.Http;
 using System.Threading.Tasks;
 
 namespace LibationUiBase;
@@ -46,96 +45,19 @@ public class UpgradeEventArgs
 
 public class Upgrader : UpgraderBase
 {
-	protected override async Task<VersionCheckResult> CheckForUpgradeAsync()
+	internal const string SourceUpdateMessage =
+		"This fork uses source-only updates. Review and build a pinned source revision to update it.";
+
+	protected override Task<VersionCheckResult> CheckForUpgradeAsync()
 	{
-		try
-		{
-			return await Task.Run(LibationScaffolding.GetLatestRelease);
-		}
-		catch (Exception ex)
-		{
-			string message = "An error occurred while checking for app upgrades.";
-			Serilog.Log.Logger.Error(ex, message);
-			OnUpgradeFailed(message, ex);
-			return new VersionCheckResult(VersionCheckOutcome.UnableToDetermine);
-		}
+		OnUpgradeFailed(SourceUpdateMessage, null);
+		return Task.FromResult(new VersionCheckResult(VersionCheckOutcome.UnableToDetermine));
 	}
 
-	protected override async Task<string?> DownloadUpgradeAsync(UpgradeProperties upgradeProperties)
+	protected override Task<string?> DownloadUpgradeAsync(UpgradeProperties upgradeProperties)
 	{
-		if (upgradeProperties.ZipUrl is null)
-		{
-			string message = "Download link for new version not found.";
-			Serilog.Log.Logger.Warning(message);
-			OnUpgradeFailed(message, null);
-			return null;
-		}
-
-		//Silently download the upgrade in the background, save it to a temp file.
-		var zipFile = GetUpgradeDownloadPath(upgradeProperties.ZipUrl);
-		if (zipFile is null)
-			return null;
-
-		Serilog.Log.Logger.Information($"Downloading {zipFile}");
-
-		try
-		{
-			using var dlClient = new HttpClient();
-			using var response = await dlClient.GetAsync(upgradeProperties.ZipUrl, HttpCompletionOption.ResponseHeadersRead);
-			using var dlStream = await response.Content.ReadAsStreamAsync();
-			using var tempFile = File.OpenWrite(zipFile);
-
-			int read;
-			long totalRead = 0;
-			Memory<byte> buffer = new byte[128 * 1024];
-			long contentLength = response.Content.Headers.ContentLength ?? 0;
-
-			while ((read = await dlStream.ReadAsync(buffer)) > 0)
-			{
-				await tempFile.WriteAsync(buffer[..read]);
-				totalRead += read;
-
-				OnDownloadProgress(
-					new DownloadProgress
-					{
-						BytesReceived = totalRead,
-						TotalBytesToReceive = contentLength,
-						ProgressPercentage = contentLength > 0 ? 100d * totalRead / contentLength : 0
-					});
-			}
-
-			return zipFile;
-		}
-		catch (Exception ex)
-		{
-			var message = $"Failed to download the upgrade: {upgradeProperties.ZipUrl}";
-			Serilog.Log.Logger.Error(ex, message);
-			OnUpgradeFailed(message, ex);
-			return null;
-		}
-	}
-
-	/// <summary>
-	/// Allocate a fresh per-run temp directory for the upgrade zip and return the full path
-	/// the zip should be downloaded to. Uses a random subdirectory name (and 0700 perms on
-	/// Unix) so we never extract or execute from a predictable, shared-temp location.
-	/// </summary>
-	/// <returns>Destination path for the upgrade zip, or <c>null</c> if the temp directory
-	/// could not be created (in which case the upgrade-failed event has already been raised).</returns>
-	private string? GetUpgradeDownloadPath(string zipUrl)
-	{
-		try
-		{
-			var stagingDir = Directory.CreateTempSubdirectory("Libation-upgrade-").FullName;
-			return Path.Combine(stagingDir, Path.GetFileName(zipUrl));
-		}
-		catch (Exception ex)
-		{
-			var message = "Failed to create a temp directory for the upgrade download.";
-			Serilog.Log.Logger.Error(ex, message);
-			OnUpgradeFailed(message, ex);
-			return null;
-		}
+		OnUpgradeFailed(SourceUpdateMessage, null);
+		return Task.FromResult<string?>(null);
 	}
 }
 

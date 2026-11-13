@@ -119,7 +119,7 @@ public partial class Configuration
 	public float GridFontScaleFactor { get => float.Min(2, float.Max(0.5f, GetNonString(defaultValue: 1f))); set => SetNonString(value); }
 
 	[Description("Check for new Libation versions at startup")]
-	public bool CheckForUpgradesAtStartup { get => GetNonString(defaultValue: true); set => SetNonString(value); }
+	public bool CheckForUpgradesAtStartup { get => GetNonString(defaultValue: false); set => SetNonString(value); }
 
 	[Description("Location for book storage. Includes destination of newly liberated books")]
 	public LongPath? Books

@@ -12,8 +12,11 @@ public class AudiobookshelfServerUrlTests
 	[DataRow("http://localhost:13378", "http://localhost:13378")]
 	[DataRow("http://localhost:13378/", "http://localhost:13378")]
 	[DataRow("https://abs.example.com", "https://abs.example.com")]
+	[DataRow("abs.example.com", "https://abs.example.com")]
+	[DataRow("http://127.0.0.1:13378", "http://127.0.0.1:13378")]
+	[DataRow("http://[::1]:13378", "http://[::1]:13378")]
 	[DataRow("https://abs.example.com/", "https://abs.example.com")]
-	[DataRow("localhost:13378", "http://localhost:13378")]
+	[DataRow("localhost:13378", "https://localhost:13378")]
 	[DataRow("http://localhost:13378/audiobookshelf", "http://localhost:13378/audiobookshelf")]
 	[DataRow("http://localhost:13378/audiobookshelf/", "http://localhost:13378/audiobookshelf")]
 	public void Normalize_keeps_valid_base_urls(string input, string expected)
@@ -63,6 +66,10 @@ public class AudiobookshelfServerUrlTests
 	[DataRow("")]
 	[DataRow("   ")]
 	[DataRow("ftp://localhost:13378")]
+	[DataRow("http://abs.example.com")]
+	[DataRow("http://192.168.1.10:13378")]
+	[DataRow("https://user:password@abs.example.com")]
+	[DataRow("http://localhost.example.com:13378")]
 	public void Normalize_rejects_invalid_urls(string? input)
 	{
 		Assert.ThrowsExactly<ArgumentException>(() => AudiobookshelfApiService.NormalizeServerUrl(input));

@@ -50,7 +50,7 @@ public class AudiobookshelfConnectTests
 	[DataRow("", "")]
 	[DataRow("   ", "")]
 	[DataRow("http://localhost:13378/library/abc", "http://localhost:13378")]
-	[DataRow("localhost:13378", "http://localhost:13378")]
+	[DataRow("localhost:13378", "https://localhost:13378")]
 	[DataRow("ftp://localhost:13378", "ftp://localhost:13378")]
 	[DataRow("  http://localhost:13378/  ", "http://localhost:13378")]
 	public void TryNormalizeServerUrlForSave_normalizes_or_keeps_trimmed(string? input, string expected)

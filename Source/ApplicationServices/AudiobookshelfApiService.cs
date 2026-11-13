@@ -48,9 +48,9 @@ public static class AudiobookshelfApiService
 
 		var trimmed = serverUrl.Trim();
 
-		// Allow host:port without a scheme (common when copying from docs or local setups).
+		// Omitted schemes use TLS, including for local servers.
 		if (!trimmed.Contains("://", StringComparison.Ordinal))
-			trimmed = "http://" + trimmed;
+			trimmed = "https://" + trimmed;
 
 		if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
 			|| (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
@@ -60,6 +60,11 @@ public static class AudiobookshelfApiService
 				"Server URL must be an absolute http(s) address, for example http://localhost:13378 or https://abs.example.com",
 				nameof(serverUrl));
 		}
+
+		if (!string.IsNullOrEmpty(uri.UserInfo))
+			throw new ArgumentException("Server URL must not contain credentials. Use the API token field.", nameof(serverUrl));
+		if (uri.Scheme == Uri.UriSchemeHttp && !uri.IsLoopback)
+			throw new ArgumentException("Use HTTPS to protect your Audiobookshelf token. HTTP is allowed only for an explicit loopback address.", nameof(serverUrl));
 
 		var path = StripClientRoutesAndApi(uri.AbsolutePath);
 		var authority = uri.GetLeftPart(UriPartial.Authority);
@@ -100,7 +105,7 @@ public static class AudiobookshelfApiService
 	private static HttpClient CreateClient(string serverUrl)
 	{
 		var normalized = NormalizeServerUrl(serverUrl);
-		var client = new HttpClient();
+		var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
 		client.BaseAddress = new Uri(normalized + "/");
 		client.Timeout = TimeSpan.FromSeconds(30);
 		return client;
@@ -177,7 +182,7 @@ public static class AudiobookshelfApiService
 				"(for example http://localhost:13378 or https://abs.example.com), " +
 				"not a library or book page from the browser. " +
 				"If Audiobookshelf is served under a subpath, include that subpath " +
-				$"(for example http://host/audiobookshelf). Response: {bodyPreview}");
+				$"(for example https://host/audiobookshelf). Response: {bodyPreview}");
 		}
 
 		return new HttpRequestException(

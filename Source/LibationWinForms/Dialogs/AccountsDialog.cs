@@ -1,4 +1,4 @@
-﻿using AudibleApi;
+using AudibleApi;
 using AudibleUtilities;
 using LibationUiBase;
 using System;
@@ -392,6 +392,11 @@ public partial class AccountsDialog : Form
 			MessageBox.Show(this, "This account hasn't been authenticated yet. First scan your library to log into your account, then try exporting again.", "Account Not Authenticated");
 			return;
 		}
+
+		if (MessageBox.Show(this,
+			"This export contains unencrypted login tokens, cookies and a device private key. Anyone with the file may be able to access your Audible account. Keep it private and never attach it to a bug report. Export credentials?",
+			"Export account credentials", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+			return;
 
 		SaveFileDialog sfd = new();
 		sfd.Filter = "JSON File|*.json";

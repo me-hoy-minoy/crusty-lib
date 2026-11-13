@@ -414,9 +414,14 @@ public partial class AccountsDialog : DialogWindow
 			return;
 		}
 
+		if (await MessageBox.Show(this,
+			"This export contains unencrypted login tokens, cookies and a device private key. Anyone with the file may be able to access your Audible account. Keep it private and never attach it to a bug report. Export credentials?",
+			"Export account credentials", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+			return;
+
 		var options = new FilePickerSaveOptions
 		{
-			Title = $"Save Sover Image",
+			Title = "Export account credentials",
 			SuggestedFileName = $"{acc.AccountId}.json",
 			DefaultExtension = "json",
 			ShowOverwritePrompt = true,

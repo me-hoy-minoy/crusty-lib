@@ -1,4 +1,4 @@
-﻿using AudibleUtilities;
+using AudibleUtilities;
 using Dinah.Core;
 using System;
 using System.Windows.Forms;
@@ -52,7 +52,7 @@ public partial class LoginExternalDialog : Form
 	{
 		ResponseUrl = this.responseUrlTb.Text?.Trim();
 
-		Serilog.Log.Logger.Information("Submit button clicked: {@DebugInfo}", new { ResponseUrl });
+		Serilog.Log.Logger.Information("External login response submitted.");
 		if (!Uri.TryCreate(ResponseUrl, UriKind.Absolute, out var result))
 		{
 			MessageBox.Show("Invalid response URL");

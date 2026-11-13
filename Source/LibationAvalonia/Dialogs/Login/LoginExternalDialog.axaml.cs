@@ -44,7 +44,7 @@ public partial class LoginExternalDialog : DialogWindow
 
 	protected override async Task SaveAndCloseAsync()
 	{
-		Serilog.Log.Logger.Information("Submit button clicked: {@DebugInfo}", new { ResponseUrl });
+		Serilog.Log.Logger.Information("External login response submitted.");
 		if (!Uri.TryCreate(ResponseUrl, UriKind.Absolute, out _))
 		{
 			await MessageBox.Show("Invalid response URL");

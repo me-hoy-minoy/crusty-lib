@@ -42,7 +42,7 @@ public class MoveWithProgress
 		var sourceDevice = GetDeviceId(sourceFileInfo);
 		var destinationDevice = GetDeviceId(destinationFile.Directory);
 
-		if (sourceDevice == destinationDevice)
+		if (sourceDevice is not null && sourceDevice == destinationDevice)
 		{
 			File.Move(sourceFileInfo.FullName, destinationFile.FullName, overwrite);
 			MoveProgress?.Invoke(this, new MoveFileProgressEventArgs(destinationFile.Length, destinationFile.Length, sourceFileInfo.Length));
@@ -70,8 +70,7 @@ public class MoveWithProgress
 	private static string? GetDeviceId(FileSystemInfo? fsEntry)
 		=> fsEntry?.FullName is not string path ? null
 		: LongPath.IsWindows ? GetDriveSerialNumber(path)
-		: LongPath.IsOSX ? RunShellCommand("stat -L -f %d \"" + path + "\"")
-		: RunShellCommand("stat -L -f -c %d \"" + path + "\"");
+		: GetUnixDeviceId(path);
 
 	private async Task<bool> CopyWithProgressAsync(FileInfo sourceFileInfo, FileInfo destinationFile, CancellationToken cancellation)
 	{
@@ -113,25 +112,28 @@ public class MoveWithProgress
 		return totalCopied == sourceFileInfo.Length;
 	}
 
-	private static string? RunShellCommand(string command)
+	private static string? GetUnixDeviceId(string path)
 	{
 		var psi = new ProcessStartInfo
 		{
-			FileName = "/bin/sh",
+			FileName = "/usr/bin/stat",
 			RedirectStandardOutput = true,
 			UseShellExecute = false,
 			CreateNoWindow = true,
-			ArgumentList = { "-c", command }
+			ArgumentList = { "-L", LongPath.IsOSX ? "-f" : "-c", "%d", path }
 		};
 		try
 		{
-			var proc = Process.Start(psi);
-			proc?.WaitForExit();
-			return proc?.StandardOutput?.ReadToEnd()?.Trim();
+			using var proc = Process.Start(psi);
+			if (proc is null)
+				return null;
+			var device = proc.StandardOutput.ReadToEnd().Trim();
+			proc.WaitForExit();
+			return proc.ExitCode == 0 && device.Length > 0 ? device : null;
 		}
 		catch (Exception e)
 		{
-			Log.Logger.Error(e, "Failed to run shell command. {@Arguments}", psi.ArgumentList);
+			Log.Logger.Error(e, "Failed to read file device with stat.");
 			return null;
 		}
 	}

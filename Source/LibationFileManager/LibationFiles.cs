@@ -2,7 +2,6 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 
@@ -248,17 +247,7 @@ public class LibationFiles
 		if (jObjFinal[LIBATION_FILES_KEY]?.Value<string>() is not string libationFiles)
 			throw new InvalidDataException($"{LIBATION_FILES_KEY} not found in {appsettingsPath}");
 
-		if (Configuration.IsWindows)
-		{
-			libationFiles = Environment.ExpandEnvironmentVariables(libationFiles);
-		}
-		else
-		{
-			//If the shell command fails and returns null, proceed with the verbatim
-			//LIBATION_FILES_KEY path and hope for the best. If Libation can't find
-			//anything at this path it will set LIBATION_FILES_KEY to UserProfile
-			libationFiles = runShellCommand("echo " + libationFiles) ?? libationFiles;
-		}
+		libationFiles = ConfiguredPath.Expand(libationFiles);
 
 		// Resolve relative paths to absolute using the appsettings.json directory as base,
 		// so that Location is consistent everywhere (e.g. avoids different resolution when
@@ -273,32 +262,5 @@ public class LibationFiles
 
 		return libationFiles;
 
-		static string? runShellCommand(string command)
-		{
-			var psi = new ProcessStartInfo
-			{
-				FileName = "/bin/sh",
-				RedirectStandardOutput = true,
-				UseShellExecute = false,
-				CreateNoWindow = true,
-				ArgumentList =
-					{
-						"-c",
-						command
-					}
-			};
-
-			try
-			{
-				var proc = Process.Start(psi);
-				proc?.WaitForExit();
-				return proc?.StandardOutput?.ReadToEnd()?.Trim();
-			}
-			catch (Exception e)
-			{
-				StartupLog.Error(e, $"Failed to run shell command: {string.Join(' ', psi.ArgumentList)}");
-				return null;
-			}
-		}
 	}
 }
